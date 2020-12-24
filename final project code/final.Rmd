@@ -1,0 +1,79 @@
+---
+title: "Final"
+author: "Wang Yiren, Qiu Yirong, Liu Chang"
+date: "2020/12/23"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(data.table)
+require(dplyr)
+require(ggplot2)
+require(glmnet)
+```
+
+
+```{r}
+origin<-fread("newdata2.csv")
+score<-origin%>%select(cogscore)%>%group_by(cogscore)%>%summarise(counts=n())
+score$cogscore=as.character(score$cogscore)
+ggplot(data=score,mapping=aes(x=cogscore,y=counts))+geom_bar(stat="identity", width=0.5, show.legend=T) +labs(y="Number of students",x="Performance",titles="Scores")+scale_x_discrete(labels=c("Below average","Above average"))+theme_classic()+geom_text(aes(label = counts), vjust = -0.2)
+
+test<-fread("testset.csv")
+train<-fread("trainset.csv")
+reg<-glm(cogscore~., train, family=binomial(link='logit'))
+summary(reg)
+test1<-test%>%select(-cogscore)
+predict_probability = predict(reg, newdata = test1, type = "response")
+predict_Y = ifelse(predict_probability>0.5,1,0)
+print (table(predict_Y))
+test2<-test%>%select(cogscore)%>%group_by(cogscore)%>%summarise(counts=n())
+output= data.frame(true=test$cogscore, predict = predict_Y)
+precision <- function(ypred, y){
+    tab <- table(ypred, y)
+    return((tab[2,2])/(tab[2,1]+tab[2,2]))
+}
+recall <- function(ypred, y){
+    tab <- table(ypred, y)
+    return(tab[2,2]/(tab[1,2]+tab[2,2]))
+}
+F1 <- function(ypred, y){
+  prec <- precision (ypred, y)
+  rec <- recall (ypred, y)
+  return ( ( 2 * prec * rec) / (prec + rec))
+}
+precision(predict_Y,test$cogscore)
+recall(predict_Y,test$cogscore)
+F1(predict_Y,test$cogscore)
+```
+
+
+```{r}
+x_vars <- model.matrix(cogscore~. , train)[,-1]
+y_var <- train$cogscore
+lambda_seq <- 10^seq(2, -2, by = -.1)
+
+x_test <- model.matrix(cogscore~. , test)[,-1]
+y_test <- test$cogscore
+
+cv_output <- cv.glmnet(x_vars, y_var, family="binomial", alpha = 1, lambda = lambda_seq,  nfolds = 5)
+best_lam <- cv_output$lambda.min
+best_lam
+lasso_best <- glmnet(x_vars, y_var, alpha = 1, lambda = best_lam)
+pred <- predict(lasso_best, s = best_lam, newx = x_test)
+predic_y = ifelse(pred>0.5,1,0)
+final <- cbind(y_test, predic_y)
+precision(predic_y,test$cogscore)
+recall(predic_y,test$cogscore)
+F1(predic_y,test$cogscore)
+
+```
+
+```{r}
+
+
+```
+
